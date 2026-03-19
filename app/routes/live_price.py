@@ -1,22 +1,4 @@
-"""
-Live Price WebSocket Router
-===========================
-
-WS  /api/live-price/stream-by-ticker
-    Connect with just ticker names:
-        ws://localhost:8000/api/live-price/stream-by-ticker?tickers=5PAISA&mode=2
-
-    After connecting, send JSON messages to change subscriptions:
-
-    Subscribe new tickers:
-        { "action": "subscribe", "tickers": "RELIANCE,TCS", "mode": 2 }
-
-    Unsubscribe tickers:
-        { "action": "unsubscribe", "tickers": "5PAISA" }
-
-    Check active subscriptions:
-        { "action": "status" }
-"""
+# app/routes/live_price.py
 
 import asyncio
 import json
@@ -45,17 +27,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 EXCHANGE_TYPE_MAP = {
-    "NSE": 1, "BSE": 3, "NSE_FO": 2, "BSE_FO": 4, "MCX": 5,
+    "NSE": 1, "BSE": 3, "NSE_FO": 2,
+    "BSE_FO": 4, "MCX": 5,
 }
 
 
 # ─── DB Helper ────────────────────────────────────────────────────────────────
 
-def get_security_codes_for_tickers(tickers: List[str], exchange: str = None):
+def get_security_codes_for_tickers(
+    tickers: List[str],
+    exchange: str = None
+):
     try:
         conn = mysql.connector.connect(
-            host=DB_HOST, user=DB_USER,
-            password=DB_PASSWORD, database=DB_NAME
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME
         )
         cursor = conn.cursor(dictionary=True)
         placeholders = ",".join(["%s"] * len(tickers))
@@ -92,7 +80,9 @@ def get_security_codes_for_tickers(tickers: List[str], exchange: str = None):
             if ticker in seen:
                 continue
             seen.add(ticker)
-            ex_type = EXCHANGE_TYPE_MAP.get(row["ticker_exchange"].upper(), 3)
+            ex_type = EXCHANGE_TYPE_MAP.get(
+                row["ticker_exchange"].upper(), 3
+            )
             code = str(row["ticker_security_code"])
             exchange_groups.setdefault(ex_type, []).append(code)
             ticker_map[code] = ticker
@@ -126,12 +116,19 @@ class LivePriceManager:
             )
             await self._service.connect()
 
-    async def subscribe(self, tokens: list[str], exchange_type: int, mode: int) -> None:
+    async def subscribe(
+        self, tokens: list[str], exchange_type: int, mode: int
+    ) -> None:
         if not self._service or not self._service.is_connected:
-            raise HTTPException(status_code=503, detail="AngelOne not connected.")
+            raise HTTPException(
+                status_code=503,
+                detail="AngelOne not connected."
+            )
         await self._service.subscribe(tokens, exchange_type, mode)
 
-    async def unsubscribe(self, tokens: list[str], exchange_type: int, mode: int) -> None:
+    async def unsubscribe(
+        self, tokens: list[str], exchange_type: int, mode: int
+    ) -> None:
         if self._service and self._service.is_connected:
             await self._service.unsubscribe(tokens, exchange_type, mode)
 
@@ -168,24 +165,34 @@ class LivePriceManager:
 
     def get_status(self) -> WSConnectionStatus:
         connected = bool(self._service and self._service.is_connected)
-        subs = self._service.get_active_subscriptions() if self._service else []
+        subs = (
+            self._service.get_active_subscriptions()
+            if self._service else []
+        )
         return WSConnectionStatus(
             connected=connected,
             active_subscriptions=subs,
             connected_clients=len(self._clients),
-            message=f"Connected · {len(subs)} sub(s) · {len(self._clients)} client(s)."
-                    if connected else "Disconnected.",
+            message=(
+                f"Connected · {len(subs)} sub(s) · {len(self._clients)} client(s)."
+                if connected else "Disconnected."
+            ),
         )
 
 
 _manager = LivePriceManager()
 
 
-# ─── Shared helper: subscribe tickers and return result ───────────────────────
+# ─── Shared Helpers ───────────────────────────────────────────────────────────
 
-async def subscribe_tickers(ticker_list: List[str], mode: int, exchange: str = None) -> dict:
-    """Lookup tickers in DB and subscribe. Returns result dict to send to client."""
-    exchange_groups, ticker_map = get_security_codes_for_tickers(ticker_list, exchange)
+async def subscribe_tickers(
+    ticker_list: List[str],
+    mode: int,
+    exchange: str = None
+) -> dict:
+    exchange_groups, ticker_map = get_security_codes_for_tickers(
+        ticker_list, exchange
+    )
 
     if not exchange_groups:
         return {"error": f"Tickers not found in DB: {ticker_list}"}
@@ -196,7 +203,9 @@ async def subscribe_tickers(ticker_list: List[str], mode: int, exchange: str = N
     errors = []
     for ex_type, codes in exchange_groups.items():
         try:
-            await _manager.subscribe(tokens=codes, exchange_type=ex_type, mode=mode)
+            await _manager.subscribe(
+                tokens=codes, exchange_type=ex_type, mode=mode
+            )
             all_codes.extend(codes)
         except Exception as exc:
             errors.append(str(exc))
@@ -213,16 +222,23 @@ async def subscribe_tickers(ticker_list: List[str], mode: int, exchange: str = N
     return result
 
 
-async def unsubscribe_tickers(ticker_list: List[str], mode: int, exchange: str = None) -> dict:
-    """Lookup tickers in DB and unsubscribe."""
-    exchange_groups, ticker_map = get_security_codes_for_tickers(ticker_list, exchange)
+async def unsubscribe_tickers(
+    ticker_list: List[str],
+    mode: int,
+    exchange: str = None
+) -> dict:
+    exchange_groups, ticker_map = get_security_codes_for_tickers(
+        ticker_list, exchange
+    )
 
     if not exchange_groups:
         return {"error": f"Tickers not found in DB: {ticker_list}"}
 
     all_codes = []
     for ex_type, codes in exchange_groups.items():
-        await _manager.unsubscribe(tokens=codes, exchange_type=ex_type, mode=mode)
+        await _manager.unsubscribe(
+            tokens=codes, exchange_type=ex_type, mode=mode
+        )
         all_codes.extend(codes)
 
     return {
@@ -232,7 +248,7 @@ async def unsubscribe_tickers(ticker_list: List[str], mode: int, exchange: str =
     }
 
 
-# ─── WebSocket: stream-by-ticker ─────────────────────────────────────────────
+# ─── WebSocket: stream by ticker name ────────────────────────────────────────
 
 @router.websocket("/live-price/stream-by-ticker")
 async def ws_stream_by_ticker(
@@ -241,24 +257,15 @@ async def ws_stream_by_ticker(
     exchange: Optional[str] = Query(default=None),
     mode:     int           = Query(default=2),
 ):
-    """
-    Connect with ticker names — no credentials needed:
-        ws://…/api/live-price/stream-by-ticker?tickers=5PAISA,RELIANCE&mode=2
-
-    Send JSON messages to change subscriptions mid-session:
-        Subscribe:   { "action": "subscribe",   "tickers": "RELIANCE,TCS", "mode": 2 }
-        Unsubscribe: { "action": "unsubscribe",  "tickers": "5PAISA" }
-        Status:      { "action": "status" }
-    """
     await _manager.add_client(websocket)
     try:
-        # ── Auto-subscribe from URL params ────────────────────────────────────
         if tickers:
-            ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+            ticker_list = [
+                t.strip() for t in tickers.split(",") if t.strip()
+            ]
             result = await subscribe_tickers(ticker_list, mode, exchange)
             await websocket.send_json(result)
 
-        # ── Listen for mid-session commands ───────────────────────────────────
         while True:
             raw = await websocket.receive_text()
 
@@ -272,31 +279,38 @@ async def ws_stream_by_ticker(
 
             if action == "subscribe":
                 raw_tickers = msg.get("tickers", "")
-                ticker_list = [t.strip() for t in raw_tickers.split(",") if t.strip()]
-                m = int(msg.get("mode", mode))
+                ticker_list = [
+                    t.strip() for t in raw_tickers.split(",") if t.strip()
+                ]
+                m  = int(msg.get("mode", mode))
                 ex = msg.get("exchange", exchange)
                 result = await subscribe_tickers(ticker_list, m, ex)
                 await websocket.send_json(result)
 
             elif action == "unsubscribe":
                 raw_tickers = msg.get("tickers", "")
-                ticker_list = [t.strip() for t in raw_tickers.split(",") if t.strip()]
+                ticker_list = [
+                    t.strip() for t in raw_tickers.split(",") if t.strip()
+                ]
                 ex = msg.get("exchange", exchange)
                 result = await unsubscribe_tickers(ticker_list, mode, ex)
                 await websocket.send_json(result)
 
             elif action == "status":
-                status_data = _manager.get_status()
+                s = _manager.get_status()
                 await websocket.send_json({
                     "status":               "ok",
-                    "connected":            status_data.connected,
-                    "active_subscriptions": status_data.active_subscriptions,
-                    "connected_clients":    status_data.connected_clients,
+                    "connected":            s.connected,
+                    "active_subscriptions": s.active_subscriptions,
+                    "connected_clients":    s.connected_clients,
                 })
 
             else:
                 await websocket.send_json({
-                    "error": f"Unknown action '{action}'. Use: subscribe | unsubscribe | status"
+                    "error": (
+                        f"Unknown action '{action}'. "
+                        "Use: subscribe | unsubscribe | status"
+                    )
                 })
 
     except WebSocketDisconnect:
@@ -307,7 +321,7 @@ async def ws_stream_by_ticker(
 
 @router.websocket("/live-price/stream")
 async def ws_live_price_stream(
-    websocket: WebSocket,
+    websocket:     WebSocket,
     tokens:        Optional[str] = Query(default=None),
     exchange_type: int           = Query(default=1),
     mode:          int           = Query(default=1),
@@ -315,11 +329,20 @@ async def ws_live_price_stream(
     await _manager.add_client(websocket)
     try:
         if tokens:
-            token_list = [t.strip() for t in tokens.split(",") if t.strip()]
+            token_list = [
+                t.strip() for t in tokens.split(",") if t.strip()
+            ]
             try:
                 await _manager.ensure_connected()
-                await _manager.subscribe(tokens=token_list, exchange_type=exchange_type, mode=mode)
-                await websocket.send_json({"status": "subscribed", "tokens": token_list})
+                await _manager.subscribe(
+                    tokens=token_list,
+                    exchange_type=exchange_type,
+                    mode=mode
+                )
+                await websocket.send_json({
+                    "status": "subscribed",
+                    "tokens": token_list
+                })
             except Exception as exc:
                 await websocket.send_json({"error": str(exc)})
 
@@ -330,16 +353,24 @@ async def ws_live_price_stream(
         _manager.remove_client(websocket)
 
 
-# ─── REST endpoints ───────────────────────────────────────────────────────────
+# ─── REST: Subscribe / Unsubscribe / Status / Disconnect ─────────────────────
 
 @router.post("/live-price/subscribe")
 async def subscribe_live_price(request: LivePriceRequest):
     try:
         await _manager.ensure_connected()
-        await _manager.subscribe(tokens=request.tokens, exchange_type=request.exchange_type, mode=request.mode)
+        await _manager.subscribe(
+            tokens=request.tokens,
+            exchange_type=request.exchange_type,
+            mode=request.mode
+        )
         return success_response(
             message="Subscribed successfully",
-            data={"tokens": request.tokens, "exchange_type": request.exchange_type, "mode": request.mode},
+            data={
+                "tokens":        request.tokens,
+                "exchange_type": request.exchange_type,
+                "mode":          request.mode,
+            },
         )
     except HTTPException:
         raise
@@ -350,8 +381,15 @@ async def subscribe_live_price(request: LivePriceRequest):
 @router.post("/live-price/unsubscribe")
 async def unsubscribe_live_price(request: UnsubscribeRequest):
     try:
-        await _manager.unsubscribe(tokens=request.tokens, exchange_type=request.exchange_type, mode=request.mode)
-        return success_response(message="Unsubscribed", data={"tokens": request.tokens})
+        await _manager.unsubscribe(
+            tokens=request.tokens,
+            exchange_type=request.exchange_type,
+            mode=request.mode
+        )
+        return success_response(
+            message="Unsubscribed",
+            data={"tokens": request.tokens}
+        )
     except Exception as e:
         return error_response("Failed to unsubscribe", str(e))
 
@@ -369,152 +407,43 @@ def get_live_price_status():
 async def disconnect_live_price():
     try:
         await _manager.disconnect()
-        return success_response(message="Disconnected")
+        return success_response(message="Disconnected from AngelOne")
     except Exception as e:
         return error_response("Failed to disconnect", str(e))
 
 
-# ─── REST: ticker-based price lookup ─────────────────────────────────────────
+# ─── REST: Ticker-based price lookup (your code) ─────────────────────────────
 
-<<<<<<< HEAD
-=======
-# from fastapi import APIRouter
-# from pydantic import BaseModel
-# from typing import List, Optional
-# from app.services.live_price_service import (
-#     get_price_by_ticker,
-#     get_prices_by_tickers
-# )
-
-# router = APIRouter()
-
-# # ============================================
-# # Request Schemas
-# # ============================================
-# class SingleTickerRequest(BaseModel):
-#     ticker: str              # "RELIANCE"
-#     exchange: Optional[str] = None  # "NSE" optional
-
-# class MultipleTickerRequest(BaseModel):
-#     tickers: List[str]       # ["RELIANCE", "INFY"]
-#     exchange: Optional[str] = None
-
-# # ============================================
-# # ROUTE 1: Single Ticker
-# # ============================================
-# @router.post("/live-price/by-ticker")
-# def get_single_ticker_price(request: SingleTickerRequest):
-#     """
-#     Ek ticker ki live price lo
-
-#     POST /api/live-price/by-ticker
-#     Body:
-#     {
-#         "ticker": "RELIANCE",
-#         "exchange": "NSE"
-#     }
-#     """
-#     result = get_price_by_ticker(
-#         request.ticker,
-#         request.exchange
-#     )
-
-#     if not result["success"]:
-#         return {
-#             "status": False,
-#             "message": result["error"]
-#         }
-
-#     return {
-#         "status":  True,
-#         "message": "Success",
-#         "data":    result
-#     }
-
-# # ============================================
-# # ROUTE 2: Multiple Tickers
-# # ============================================
-# @router.post("/live-price/by-tickers")
-# def get_multiple_ticker_prices(request: MultipleTickerRequest):
-#     """
-#     Multiple tickers ki prices
-
-#     POST /api/live-price/by-tickers
-#     Body:
-#     {
-#         "tickers": ["RELIANCE", "INFY", "TCS"],
-#         "exchange": "NSE"
-#     }
-#     """
-#     results = get_prices_by_tickers(
-#         request.tickers,
-#         request.exchange
-#     )
-
-#     return {
-#         "status":  True,
-#         "message": "Success",
-#         "data":    results
-#     }
-
-
-# app/routes/live_price.py
-
-from fastapi import APIRouter
-from pydantic import BaseModel
-from typing import List, Optional
-from app.services.live_price_service import (
-    get_price_by_ticker,
-    get_prices_by_tickers
-)
-
-router = APIRouter()
-
->>>>>>> 014651158ad24b5d5bd907d3e4c3d8b27c561f82
 class SingleTickerRequest(BaseModel):
-    ticker: str
+    ticker:   str
     exchange: Optional[str] = None
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 014651158ad24b5d5bd907d3e4c3d8b27c561f82
 class MultipleTickerRequest(BaseModel):
-    tickers: List[str]
+    tickers:  List[str]
     exchange: Optional[str] = None
 
-<<<<<<< HEAD
 
 @router.post("/live-price/by-ticker")
-def get_single_ticker_price(request: SingleTickerRequest):
-    result = get_price_by_ticker(request.ticker, request.exchange)
+async def get_single_ticker_price(request: SingleTickerRequest):
+    """
+    Get live price for a single ticker.
+    POST /api/live-price/by-ticker
+    Body: { "ticker": "RELIANCE", "exchange": "NSE" }
+    """
+    result = await get_price_by_ticker(request.ticker, request.exchange)
     if not result["success"]:
         return error_response("Ticker not found", result["error"])
     return success_response(message="Success", data=result)
 
 
 @router.post("/live-price/by-tickers")
-def get_multiple_ticker_prices(request: MultipleTickerRequest):
-    results = get_prices_by_tickers(request.tickers, request.exchange)
-    return success_response(message="Success", data=results)
-=======
-# Async route
-@router.post("/live-price/by-ticker")
-async def get_single_ticker_price(request: SingleTickerRequest):
-    result = await get_price_by_ticker(
-        request.ticker,
-        request.exchange
-    )
-    if not result["success"]:
-        return {"status": False, "message": result["error"]}
-    return {"status": True, "message": "Success", "data": result}
-
-# Async route — multiple tickers parallel
-@router.post("/live-price/by-tickers")
 async def get_multiple_ticker_prices(request: MultipleTickerRequest):
+    """
+    Get live prices for multiple tickers in parallel.
+    POST /api/live-price/by-tickers
+    Body: { "tickers": ["RELIANCE", "TCS"], "exchange": "NSE" }
+    """
     results = await get_prices_by_tickers(
-        request.tickers,
-        request.exchange
+        request.tickers, request.exchange
     )
-    return {"status": True, "message": "Success", "data": results}
->>>>>>> 014651158ad24b5d5bd907d3e4c3d8b27c561f82
+    return success_response(message="Success", data=results)
