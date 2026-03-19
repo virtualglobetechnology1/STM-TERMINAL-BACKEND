@@ -6,6 +6,8 @@ from app.routes import live_price
 from app.routes import backtest
 from app.routes import historical
 
+from app.routes import search
+
 app = FastAPI(title="STM Backtest API", version="1.0.0")
 
 # ✅ GZIP compression (BIG WIN)
@@ -23,6 +25,7 @@ app.add_middleware(
 app.include_router(backtest.router, prefix="/api", tags=["backtest"])
 app.include_router(historical.router, prefix="/api", tags=["historical"])
 app.include_router(live_price.router, prefix="/api", tags=["live-price"])
+app.include_router(search.router, prefix="/api", tags=["search"])
 
 @app.get("/health")
 def health_check():
