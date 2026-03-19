@@ -376,15 +376,114 @@ async def disconnect_live_price():
 
 # ─── REST: ticker-based price lookup ─────────────────────────────────────────
 
+<<<<<<< HEAD
+=======
+# from fastapi import APIRouter
+# from pydantic import BaseModel
+# from typing import List, Optional
+# from app.services.live_price_service import (
+#     get_price_by_ticker,
+#     get_prices_by_tickers
+# )
+
+# router = APIRouter()
+
+# # ============================================
+# # Request Schemas
+# # ============================================
+# class SingleTickerRequest(BaseModel):
+#     ticker: str              # "RELIANCE"
+#     exchange: Optional[str] = None  # "NSE" optional
+
+# class MultipleTickerRequest(BaseModel):
+#     tickers: List[str]       # ["RELIANCE", "INFY"]
+#     exchange: Optional[str] = None
+
+# # ============================================
+# # ROUTE 1: Single Ticker
+# # ============================================
+# @router.post("/live-price/by-ticker")
+# def get_single_ticker_price(request: SingleTickerRequest):
+#     """
+#     Ek ticker ki live price lo
+
+#     POST /api/live-price/by-ticker
+#     Body:
+#     {
+#         "ticker": "RELIANCE",
+#         "exchange": "NSE"
+#     }
+#     """
+#     result = get_price_by_ticker(
+#         request.ticker,
+#         request.exchange
+#     )
+
+#     if not result["success"]:
+#         return {
+#             "status": False,
+#             "message": result["error"]
+#         }
+
+#     return {
+#         "status":  True,
+#         "message": "Success",
+#         "data":    result
+#     }
+
+# # ============================================
+# # ROUTE 2: Multiple Tickers
+# # ============================================
+# @router.post("/live-price/by-tickers")
+# def get_multiple_ticker_prices(request: MultipleTickerRequest):
+#     """
+#     Multiple tickers ki prices
+
+#     POST /api/live-price/by-tickers
+#     Body:
+#     {
+#         "tickers": ["RELIANCE", "INFY", "TCS"],
+#         "exchange": "NSE"
+#     }
+#     """
+#     results = get_prices_by_tickers(
+#         request.tickers,
+#         request.exchange
+#     )
+
+#     return {
+#         "status":  True,
+#         "message": "Success",
+#         "data":    results
+#     }
+
+
+# app/routes/live_price.py
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+from typing import List, Optional
+from app.services.live_price_service import (
+    get_price_by_ticker,
+    get_prices_by_tickers
+)
+
+router = APIRouter()
+
+>>>>>>> 014651158ad24b5d5bd907d3e4c3d8b27c561f82
 class SingleTickerRequest(BaseModel):
     ticker: str
     exchange: Optional[str] = None
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 014651158ad24b5d5bd907d3e4c3d8b27c561f82
 class MultipleTickerRequest(BaseModel):
     tickers: List[str]
     exchange: Optional[str] = None
 
+<<<<<<< HEAD
 
 @router.post("/live-price/by-ticker")
 def get_single_ticker_price(request: SingleTickerRequest):
@@ -398,3 +497,24 @@ def get_single_ticker_price(request: SingleTickerRequest):
 def get_multiple_ticker_prices(request: MultipleTickerRequest):
     results = get_prices_by_tickers(request.tickers, request.exchange)
     return success_response(message="Success", data=results)
+=======
+# Async route
+@router.post("/live-price/by-ticker")
+async def get_single_ticker_price(request: SingleTickerRequest):
+    result = await get_price_by_ticker(
+        request.ticker,
+        request.exchange
+    )
+    if not result["success"]:
+        return {"status": False, "message": result["error"]}
+    return {"status": True, "message": "Success", "data": result}
+
+# Async route — multiple tickers parallel
+@router.post("/live-price/by-tickers")
+async def get_multiple_ticker_prices(request: MultipleTickerRequest):
+    results = await get_prices_by_tickers(
+        request.tickers,
+        request.exchange
+    )
+    return {"status": True, "message": "Success", "data": results}
+>>>>>>> 014651158ad24b5d5bd907d3e4c3d8b27c561f82

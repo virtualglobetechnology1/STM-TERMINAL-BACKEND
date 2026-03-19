@@ -1,11 +1,14 @@
-# # get_token.py
-# import requests
-
-# # Yahan apni details daalo
+# import requests # import pyotp
 # API_KEY     = "TotqUGJp"
-# CLIENT_CODE = "AABZ076636"  # A123456
-# PASSWORD    = "Dozen@7007"
-# TOTP        = "858080"  # Authenticator app se
+# CLIENT_CODE = "AABZ076636"
+# MPIN        = "7007"
+# TOTP_SECRET = "UZPWRDEXK2HWLF5EL4MQSQDM6I"
+
+# print("Script is Running...")
+
+# totp = pyotp.TOTP(TOTP_SECRET)
+# current_totp = totp.now()
+# print("TOTP:", current_totp)
 
 # url = "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword"
 
@@ -14,102 +17,172 @@
 #     "Accept": "application/json",
 #     "X-UserType": "USER",
 #     "X-SourceID": "WEB",
-#     "X-ClientLocalIP": "CLIENT_LOCAL_IP",
-#     "X-ClientPublicIP": "CLIENT_PUBLIC_IP",
-#     "X-MACAddress": "MAC_ADDRESS",
+#     "X-ClientLocalIP": "127.0.0.1",
+#     "X-ClientPublicIP": "127.0.0.1",
+#     "X-MACAddress": "00:00:00:00:00:00",
 #     "X-PrivateKey": API_KEY
 # }
 
 # body = {
 #     "clientcode": CLIENT_CODE,
-#     "password": PASSWORD,
-#     "totp": TOTP
+#     "password": MPIN,
+#     "totp": current_totp
 # }
 
+# print("Login is on going...")
 # response = requests.post(url, json=body, headers=headers)
 # data = response.json()
 
-# print("Full Response:", data)
-# print("JWT Token:", data["data"]["jwtToken"])
-# print("Feed Token:", data["data"]["feedToken"])
-# print("Refresh Token:", data["data"]["refreshToken"])
-# # ```
+# print("Response:", data)
 
-# # ---
-
-# # ## TOTP Kya Hai?
-# # ```
-# # TOTP = Time based One Time Password
-# # 6 digit code jo har 30 sec mein change hota hai
-
-# # Kaise setup karo:
-# # 1. Angel One app kholo
-# # 2. Profile → Security → TOTP Enable karo
-# # 3. Google Authenticator ya similar app se scan karo
-# # 4. Har baar login ke waqt woh 6 digit daalna hoga
-
-
-
-
+# if data["status"]:
+#     jwt = data["data"]["jwtToken"]
+#     feed = data["data"]["feedToken"]
+    
+#     print("\n✅ LOGIN SUCCESSFUL!")
+#     print("JWT Token:", jwt)
+#     print("Feed Token:", feed)
+    
+#     # .env mein save karo
+#     with open(".env", "a") as f:
+#         f.write(f"\nANGEL_JWT_TOKEN={jwt}")
+#         f.write(f"\nANGEL_FEED_TOKEN={feed}")
+    
+#     print("\n.env file update successful!")
+    
+# else:
+#     print("\n❌ Login Failed:", data["message"])
+#     print("Error Code:", data["errorcode"])
 
 
 
-
+# get_token.py — Poora replace karo
 
 import requests
 import pyotp
+import os
+from dotenv import load_dotenv
 
-API_KEY     = "TotqUGJp"
-CLIENT_CODE = "AABZ076636"
-MPIN        = "7007"
-TOTP_SECRET = "UZPWRDEXK2HWLF5EL4MQSQDM6I"
+load_dotenv()
 
-print("Script is Running...")
+# .env se credentials lo — hardcode nahi
+API_KEY      = os.getenv("ANGEL_API_KEY")
+CLIENT_CODE  = os.getenv("ANGEL_CLIENT_CODE")
+MPIN         = os.getenv("ANGEL_MPIN")
+TOTP_SECRET  = os.getenv("ANGEL_TOTP_SECRET")
 
-totp = pyotp.TOTP(TOTP_SECRET)
-current_totp = totp.now()
-print("TOTP:", current_totp)
+def get_angel_tokens():
 
-url = "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword"
+    # Validate karo
+    if not all([API_KEY, CLIENT_CODE, MPIN, TOTP_SECRET]):
+        print(".env mein credentials missing hain!")
+        print(f"API_KEY: {'✅' if API_KEY else 'Error'}")
+        print(f"CLIENT_CODE: {'✅' if CLIENT_CODE else 'client code error'}")
+        print(f"MPIN: {'✅' if MPIN else 'MPIN error'}")
+        print(f"TOTP_SECRET: {'✅' if TOTP_SECRET else 'totp error'}")
+        return None
 
-headers = {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-    "X-UserType": "USER",
-    "X-SourceID": "WEB",
-    "X-ClientLocalIP": "127.0.0.1",
-    "X-ClientPublicIP": "127.0.0.1",
-    "X-MACAddress": "00:00:00:00:00:00",
-    "X-PrivateKey": API_KEY
-}
+    # TOTP generate karo
+    try:
+        totp = pyotp.TOTP(TOTP_SECRET)
+        current_totp = totp.now()
+        print(f" TOTP Generated: {current_totp}")
+    except Exception as e:
+        print(f" TOTP Error: {e}")
+        return None
 
-body = {
-    "clientcode": CLIENT_CODE,
-    "password": MPIN,
-    "totp": current_totp
-}
+    # Login API
+    url = "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword"
 
-print("Login is on going...")
-response = requests.post(url, json=body, headers=headers)
-data = response.json()
+    headers = {
+        "Content-Type":        "application/json",
+        "Accept":              "application/json",
+        "X-UserType":          "USER",
+        "X-SourceID":          "WEB",
+        "X-ClientLocalIP":     "127.0.0.1",
+        "X-ClientPublicIP":    "127.0.0.1",
+        "X-MACAddress":        "00:00:00:00:00:00",
+        "X-PrivateKey":        API_KEY
+    }
 
-print("Response:", data)
+    body = {
+        "clientcode": CLIENT_CODE,
+        "password":   MPIN,
+        "totp":       current_totp
+    }
 
-if data["status"]:
-    jwt = data["data"]["jwtToken"]
-    feed = data["data"]["feedToken"]
-    
-    print("\n✅ LOGIN SUCCESSFUL!")
-    print("JWT Token:", jwt)
-    print("Feed Token:", feed)
-    
-    # .env mein save karo
-    with open(".env", "a") as f:
-        f.write(f"\nANGEL_JWT_TOKEN={jwt}")
-        f.write(f"\nANGEL_FEED_TOKEN={feed}")
-    
-    print("\n.env file update successful!")
-    
-else:
-    print("\n❌ Login Failed:", data["message"])
-    print("Error Code:", data["errorcode"])
+    try:
+        print("AngelOne login ho raha hai...")
+        response = requests.post(url, json=body, headers=headers)
+        data = response.json()
+
+        if not data.get("status"):
+            print(f" Login Failed: {data.get('message')}")
+            print(f"Error Code: {data.get('errorcode')}")
+            return None
+
+        jwt_token  = data["data"]["jwtToken"]
+        feed_token = data["data"]["feedToken"]
+
+        print(" Login Successful!")
+
+        # .env mein save karo
+        update_env_file(jwt_token, feed_token)
+
+        return {
+            "jwt_token":  jwt_token,
+            "feed_token": feed_token
+        }
+
+    except Exception as e:
+        print(f" Error: {e}")
+        return None
+
+
+def update_env_file(jwt_token, feed_token):
+    """
+    .env file mein sirf JWT aur Feed token update karo
+    Baaki sab same rehega
+    """
+    env_path = ".env"
+
+    # Existing .env read karo
+    lines = []
+    try:
+        with open(env_path, "r") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        pass
+
+    # JWT aur Feed token update karo
+    updated = {
+        "ANGEL_JWT_TOKEN":  jwt_token,
+        "ANGEL_FEED_TOKEN": feed_token
+    }
+
+    new_lines = []
+    updated_keys = set()
+
+    for line in lines:
+        key = line.split("=")[0].strip()
+        if key in updated:
+            new_lines.append(f"{key}={updated[key]}\n")
+            updated_keys.add(key)
+        else:
+            new_lines.append(line)
+
+    # Jo keys nahi thi unhe add karo
+    for key, val in updated.items():
+        if key not in updated_keys:
+            new_lines.append(f"{key}={val}\n")
+
+    with open(env_path, "w") as f:
+        f.writelines(new_lines)
+
+    print(".env file updated!")
+    print(f"JWT Token: {jwt_token[:30]}...")
+    print(f"Feed Token: {feed_token}")
+
+
+if __name__ == "__main__":
+    get_angel_tokens()
