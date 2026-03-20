@@ -1,13 +1,15 @@
+# app/routes/historical.py
+
 from fastapi import APIRouter
 from app.schemas.historical_schema import HistoricalRequest
 from app.services.s3_service import get_csv_from_s3
-# from app.services.csv_service import process_csv_from_s3
 from app.utils.response import success_response, error_response
 
 router = APIRouter()
 
+
 @router.post("/historical-data")
-def get_historical_data(request: HistoricalRequest):
+async def get_historical_data(request: HistoricalRequest):
     try:
         if not request.ticker:
             return error_response("ticker is required")
@@ -16,21 +18,20 @@ def get_historical_data(request: HistoricalRequest):
             return error_response("start_date and end_date are required")
 
         ticker = request.ticker.upper()
-
         bucket = "dd-historical-data"
-        key = f"stocks-data-2013-2025/{ticker}.csv"
+        key    = f"stocks-data-2013-2025/{ticker}.csv"
 
-        # ✅ Fetch CSV (now faster)
+        # Async S3 fetch
         try:
-            csv_data = get_csv_from_s3(bucket, key)
+            csv_data = await get_csv_from_s3(bucket, key)
         except Exception as e:
             return error_response("Symbol not found in S3", e)
 
-        # ✅ Process CSV
+        # Async CSV process
         try:
             from app.services.csv_service import process_csv_from_s3
 
-            filtered_data = process_csv_from_s3(
+            filtered_data = await process_csv_from_s3(
                 bucket,
                 key,
                 request.start_date,

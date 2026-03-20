@@ -429,207 +429,6 @@ class AngelOneWSService:
         if correlation_id:
             payload["correlationID"] = correlation_id
         return payload
-    
-
-#     import requests
-# import mysql.connector
-# from app.core.config import (
-#     ANGEL_API_KEY,
-#     ANGEL_JWT_TOKEN,
-#     ANGEL_LTP_URL,
-#     DB_HOST,
-#     DB_USER,
-#     DB_PASSWORD,
-#     DB_NAME
-# )
-
-# # ============================================
-# # DB SE SECURITY CODE FETCH KARO
-# # ============================================
-# def get_security_code_from_db(ticker: str, exchange: str = None):
-#     """
-#     Ticker name se security code lo DB se
-
-#     ticker: "RELIANCE"
-#     exchange: "NSE" ya "BSE" (optional)
-
-#     Returns:
-#     {
-#         "ticker_id": 123,
-#         "ticker": "RELIANCE",
-#         "security_code": "2885",
-#         "exchange": "NSE"
-#     }
-#     """
-#     try:
-#         conn = mysql.connector.connect(
-#             host=DB_HOST,
-#             user=DB_USER,
-#             password=DB_PASSWORD,
-#             database=DB_NAME
-#         )
-#         cursor = conn.cursor(dictionary=True)
-
-#         # Exchange filter hai ya nahi?
-#         if exchange:
-#             query = """
-#                 SELECT 
-#                     ticker_id,
-#                     ticker,
-#                     ticker_security_code,
-#                     ticker_exchange
-#                 FROM dd_ticker_list
-#                 WHERE ticker = %s
-#                 AND ticker_exchange = %s
-#                 AND ticker_security_code IS NOT NULL
-#                 LIMIT 1
-#             """
-#             cursor.execute(query, (ticker.upper(), exchange.upper()))
-#         else:
-#             query = """
-#                 SELECT 
-#                     ticker_id,
-#                     ticker,
-#                     ticker_security_code,
-#                     ticker_exchange
-#                 FROM dd_ticker_list
-#                 WHERE ticker = %s
-#                 AND ticker_security_code IS NOT NULL
-#                 LIMIT 1
-#             """
-#             cursor.execute(query, (ticker.upper(),))
-
-#         result = cursor.fetchone()
-#         cursor.close()
-#         conn.close()
-
-#         if not result:
-#             return None
-
-#         return {
-#             "ticker_id":     result["ticker_id"],
-#             "ticker":        result["ticker"],
-#             "security_code": str(result["ticker_security_code"]),
-#             "exchange":      result["ticker_exchange"]
-#         }
-
-#     except Exception as e:
-#         print(f"DB Error: {e}")
-#         return None
-
-
-# # ============================================
-# # ANGEL ONE SE LIVE PRICE FETCH KARO
-# # ============================================
-# def fetch_price_from_angel(exchange: str, security_code: str):
-#     """
-#     Security code se live price lo AngelOne se
-#     """
-#     headers = {
-#         "Authorization":    f"Bearer {ANGEL_JWT_TOKEN}",
-#         "Content-Type":     "application/json",
-#         "Accept":           "application/json",
-#         "X-UserType":       "USER",
-#         "X-SourceID":       "WEB",
-#         "X-ClientLocalIP":  "127.0.0.1",
-#         "X-ClientPublicIP": "127.0.0.1",
-#         "X-MACAddress":     "00:00:00:00:00:00",
-#         "X-PrivateKey":     ANGEL_API_KEY
-#     }
-
-#     body = {
-#         "mode": "LTP",
-#         "exchangeTokens": {
-#             exchange: [security_code]
-#         }
-#     }
-
-#     try:
-#         response = requests.post(
-#             ANGEL_LTP_URL,
-#             json=body,
-#             headers=headers
-#         )
-#         data = response.json()
-
-#         if not data.get("status"):
-#             return None, data.get("message", "API Error")
-
-#         fetched = data["data"]["fetched"]
-#         if not fetched:
-#             return None, "No price data"
-
-#         ltp = fetched[0]["ltp"]
-#         return ltp, None
-
-#     except Exception as e:
-#         return None, str(e)
-
-
-# # ============================================
-# # MAIN FUNCTION — TICKER → PRICE
-# # ============================================
-# def get_price_by_ticker(ticker: str, exchange: str = None):
-#     """
-#     Sirf ticker name do — price milegi
-
-#     Usage:
-#     result = get_price_by_ticker("RELIANCE")
-#     result = get_price_by_ticker("RELIANCE", "NSE")
-#     """
-
-#     # Step 1: DB se security code lo
-#     stock_info = get_security_code_from_db(ticker, exchange)
-
-#     if not stock_info:
-#         return {
-#             "success": False,
-#             "error": f"Ticker '{ticker}' database mein nahi mila"
-#         }
-
-#     # print(f"DB se mila: {stock_info}")
-
-#     # Step 2: Angel One se price lo
-#     ltp, error = fetch_price_from_angel(
-#         stock_info["exchange"],
-#         stock_info["security_code"]
-#     )
-
-#     if error:
-#         return {
-#             "success": False,
-#             "error": error
-#         }
-
-#     # Step 3: Response banao
-#     return {
-#         "success":       True,
-#         "ticker":        stock_info["ticker"],
-#         "exchange":      stock_info["exchange"],
-#         "security_code": stock_info["security_code"],
-#         "ltp":           ltp
-#     }
-
-
-# # ============================================
-# # MULTIPLE TICKERS KI PRICE
-# # ============================================
-# def get_prices_by_tickers(tickers: list, exchange: str = None):
-#     """
-#     Multiple tickers ki prices
-
-#     Usage:
-#     results = get_prices_by_tickers(["RELIANCE", "INFY", "TCS"])
-#     """
-#     results = {}
-
-#     for ticker in tickers:
-#         result = get_price_by_ticker(ticker, exchange)
-#         results[ticker] = result
-
-#     return results
-
-
 
 
 # app/services/live_price_service.py
@@ -673,7 +472,7 @@ async def get_security_code_from_db(ticker: str, exchange: str = None):
                         ticker,
                         ticker_security_code,
                         ticker_exchange
-                    FROM dd_ticker_list
+                    FROM dd_new_ticker_list
                     WHERE ticker = %s
                     AND ticker_exchange = %s
                     AND ticker_security_code IS NOT NULL
@@ -687,7 +486,7 @@ async def get_security_code_from_db(ticker: str, exchange: str = None):
                         ticker,
                         ticker_security_code,
                         ticker_exchange
-                    FROM dd_ticker_list
+                    FROM dd_new_ticker_list
                     WHERE ticker = %s
                     AND ticker_security_code IS NOT NULL
                     LIMIT 1

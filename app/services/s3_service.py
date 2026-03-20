@@ -1,27 +1,23 @@
-import boto3
+# app/services/s3_service.py
+
+import aioboto3
 import os
-from botocore.config import Config
 from botocore.exceptions import ClientError
 
-# ✅ Optimized config (connection pooling)
-config = Config(
-    max_pool_connections=50
-)
+# One global session reused across requests
+_session = aioboto3.Session()
 
-# ✅ Create ONE global S3 client (reused across requests)
-s3 = boto3.client(
-    "s3",
-    region_name=os.getenv("AWS_REGION", "ap-south-1"),
-    config=config
-)
-
-def get_csv_from_s3(bucket: str, key: str) -> bytes:
+async def get_csv_from_s3(bucket: str, key: str) -> bytes:
     """
-    Fetch CSV file from S3 and return as BYTES (faster than string)
+    Fetch CSV file from S3 and return as BYTES
     """
     try:
-        response = s3.get_object(Bucket=bucket, Key=key)
-        return response["Body"].read()  # ✅ return bytes
+        async with _session.client(
+            "s3",
+            region_name=os.getenv("AWS_REGION", "ap-south-1")
+        ) as s3:
+            response = await s3.get_object(Bucket=bucket, Key=key)
+            return await response["Body"].read()
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]

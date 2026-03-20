@@ -1,10 +1,7 @@
 # app/services/search_service.py
 
 import aiomysql
-import asyncio
-import time
 import math
-from typing import Optional
 from app.core.config import (
     DB_HOST, DB_PORT,
     DB_USER, DB_PASSWORD, DB_NAME
@@ -12,6 +9,7 @@ from app.core.config import (
 
 # ─────────────────────────────────────────────────────
 # CONNECTION POOL
+# One pool for all requests — no new connection each time
 # ─────────────────────────────────────────────────────
 _pool = None
 
@@ -33,43 +31,12 @@ async def get_pool():
 
 
 # ─────────────────────────────────────────────────────
-# CACHE
-# TTL = 5 minutes
-# ─────────────────────────────────────────────────────
-_cache = {}
-CACHE_TTL = 300
-
-def _get_cache_key(
-    ticker_name: str,
-    exchange: str,
-    page: int,
-    page_size: int
-) -> str:
-    return f"{ticker_name.strip().lower()}|{exchange or 'ALL'}|{page}|{page_size}"
-
-def _get_from_cache(key: str):
-    if key in _cache:
-        data, saved_at = _cache[key]
-        if time.time() - saved_at < CACHE_TTL:
-            return data
-        del _cache[key]
-    return None
-
-def _save_to_cache(key: str, data: dict):
-    _cache[key] = (data, time.time())
-
-def clear_search_cache():
-    global _cache
-    _cache = {}
-    print("Search cache cleared!")
-
-
-# ─────────────────────────────────────────────────────
 # SUGGESTIONS
+# Auto-complete suggestions based on search results
 # ─────────────────────────────────────────────────────
 def _generate_suggestions(results: list, ticker_name: str) -> list:
     suggestions = []
-    seen = set()
+    seen        = set()
     query_upper = ticker_name.upper()
 
     for row in results:
@@ -100,91 +67,75 @@ def _generate_suggestions(results: list, ticker_name: str) -> list:
 
 # ─────────────────────────────────────────────────────
 # MAIN SEARCH FUNCTION
+# Table: dd_new_ticker_list
+# Filter: NSE and BSE only
+# Async with connection pool
 # ─────────────────────────────────────────────────────
 async def search_tickers(
     ticker_name: str,
-    exchange: str = None,
-    page: int = 1,
-    page_size: int = 10
+    exchange:    str = None,
+    page:        int = 1,
+    page_size:   int = 10
 ):
-    """
-    Search dd_ticker_list by:
-    - ticker       (RELIANCE)
-    - ticker_issuer_name (Reliance Industries)
-    - ticker_exchange filter (NSE / BSE)
-
-    Returns paginated results + suggestions
-    """
-
     ticker_name = ticker_name.strip()
 
-    # Validate input
+    # Input validation
     if not ticker_name:
         return {
-            "success": False,
-            "error": "ticker_name is required",
-            "results": [],
+            "success":     False,
+            "error":       "ticker_name is required",
+            "results":     [],
             "suggestions": [],
-            "total": 0
+            "total":       0
         }
 
     if page < 1:
         return {
-            "success": False,
-            "error": "page must be greater than 0",
-            "results": [],
+            "success":     False,
+            "error":       "page must be greater than 0",
+            "results":     [],
             "suggestions": [],
-            "total": 0
+            "total":       0
         }
 
     if page_size < 1 or page_size > 50:
         return {
-            "success": False,
-            "error": "page_size must be between 1 and 50",
-            "results": [],
+            "success":     False,
+            "error":       "page_size must be between 1 and 50",
+            "results":     [],
             "suggestions": [],
-            "total": 0
+            "total":       0
         }
 
-    # Check cache
-    cache_key = _get_cache_key(ticker_name, exchange, page, page_size)
-    cached = _get_from_cache(cache_key)
-    if cached:
-        return {**cached, "source": "cache"}
-
-    # DB Query
     try:
-        pool = await get_pool()
-        offset = (page - 1) * page_size
-        search_term = f"%{ticker_name}%"
+        pool              = await get_pool()
+        offset            = (page - 1) * page_size
+        search_term       = f"%{ticker_name}%"
         search_term_start = f"{ticker_name.upper()}%"
-        ticker_upper = ticker_name.upper()
+        ticker_upper      = ticker_name.upper()
 
         async with pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cursor:
 
-                # ── With exchange filter ──────────────────────
+                # ── With exchange filter (NSE or BSE only) ────────────────────
                 if exchange:
+
                     # Count query
-                    count_sql = """
+                    await cursor.execute("""
                         SELECT COUNT(*) as total
-                        FROM dd_ticker_list
-                        WHERE
-                            ticker_exchange = %s
-                            AND (
-                                ticker            LIKE %s
-                                OR ticker_issuer_name LIKE %s
-                            )
-                    """
-                    await cursor.execute(
-                        count_sql,
-                        (exchange.upper(), search_term, search_term)
-                    )
-                    count_row = await cursor.fetchone()
-                    total = count_row["total"]
+                        FROM dd_new_ticker_list
+                        WHERE ticker_exchange = %s
+                        AND   ticker_exchange IN ('NSE', 'BSE')
+                        AND (
+                            ticker            LIKE %s
+                            OR ticker_issuer_name LIKE %s
+                        )
+                    """, (exchange.upper(), search_term, search_term))
+
+                    total = (await cursor.fetchone())["total"]
 
                     # Data query
-                    data_sql = """
+                    await cursor.execute("""
                         SELECT
                             ticker_id,
                             ticker,
@@ -192,54 +143,46 @@ async def search_tickers(
                             ticker_issuer_name,
                             ticker_isin_no,
                             ticker_status
-                        FROM dd_ticker_list
-                        WHERE
-                            ticker_exchange = %s
-                            AND (
-                                ticker            LIKE %s
-                                OR ticker_issuer_name LIKE %s
-                            )
+                        FROM dd_new_ticker_list
+                        WHERE ticker_exchange = %s
+                        AND   ticker_exchange IN ('NSE', 'BSE')
+                        AND (
+                            ticker            LIKE %s
+                            OR ticker_issuer_name LIKE %s
+                        )
                         ORDER BY
                             CASE
-                                WHEN ticker = %s      THEN 1
-                                WHEN ticker LIKE %s   THEN 2
+                                WHEN ticker = %s    THEN 1
+                                WHEN ticker LIKE %s THEN 2
                                 ELSE 3
                             END,
                             ticker ASC
                         LIMIT %s OFFSET %s
-                    """
-                    await cursor.execute(
-                        data_sql,
-                        (
-                            exchange.upper(),
-                            search_term,
-                            search_term,
-                            ticker_upper,
-                            search_term_start,
-                            page_size,
-                            offset
-                        )
-                    )
+                    """, (
+                        exchange.upper(),
+                        search_term,    search_term,
+                        ticker_upper,   search_term_start,
+                        page_size,      offset
+                    ))
 
-                # ── Without exchange filter ───────────────────
+                # ── Without exchange filter (NSE + BSE both) ─────────────────
                 else:
+
                     # Count query
-                    count_sql = """
+                    await cursor.execute("""
                         SELECT COUNT(*) as total
-                        FROM dd_ticker_list
-                        WHERE
+                        FROM dd_new_ticker_list
+                        WHERE ticker_exchange IN ('NSE', 'BSE')
+                        AND (
                             ticker            LIKE %s
                             OR ticker_issuer_name LIKE %s
-                    """
-                    await cursor.execute(
-                        count_sql,
-                        (search_term, search_term)
-                    )
-                    count_row = await cursor.fetchone()
-                    total = count_row["total"]
+                        )
+                    """, (search_term, search_term))
+
+                    total = (await cursor.fetchone())["total"]
 
                     # Data query
-                    data_sql = """
+                    await cursor.execute("""
                         SELECT
                             ticker_id,
                             ticker,
@@ -247,30 +190,25 @@ async def search_tickers(
                             ticker_issuer_name,
                             ticker_isin_no,
                             ticker_status
-                        FROM dd_ticker_list
-                        WHERE
+                        FROM dd_new_ticker_list
+                        WHERE ticker_exchange IN ('NSE', 'BSE')
+                        AND (
                             ticker            LIKE %s
                             OR ticker_issuer_name LIKE %s
+                        )
                         ORDER BY
                             CASE
-                                WHEN ticker = %s      THEN 1
-                                WHEN ticker LIKE %s   THEN 2
+                                WHEN ticker = %s    THEN 1
+                                WHEN ticker LIKE %s THEN 2
                                 ELSE 3
                             END,
                             ticker ASC
                         LIMIT %s OFFSET %s
-                    """
-                    await cursor.execute(
-                        data_sql,
-                        (
-                            search_term,
-                            search_term,
-                            ticker_upper,
-                            search_term_start,
-                            page_size,
-                            offset
-                        )
-                    )
+                    """, (
+                        search_term,    search_term,
+                        ticker_upper,   search_term_start,
+                        page_size,      offset
+                    ))
 
                 rows = await cursor.fetchall()
 
@@ -290,30 +228,20 @@ async def search_tickers(
         # Pagination meta
         total_pages = math.ceil(total / page_size) if total > 0 else 1
 
-        pagination = {
-            "total":       total,
-            "page":        page,
-            "page_size":   page_size,
-            "total_pages": total_pages,
-            "has_next":    page < total_pages,
-            "has_prev":    page > 1
-        }
-
-        # Generate suggestions
-        suggestions = _generate_suggestions(results, ticker_name)
-
-        # Save to cache
-        response = {
+        return {
             "success":     True,
-            "source":      "db",
             "results":     results,
-            "suggestions": suggestions,
+            "suggestions": _generate_suggestions(results, ticker_name),
             "total":       total,
-            "pagination":  pagination
+            "pagination": {
+                "total":       total,
+                "page":        page,
+                "page_size":   page_size,
+                "total_pages": total_pages,
+                "has_next":    page < total_pages,
+                "has_prev":    page > 1
+            }
         }
-        _save_to_cache(cache_key, response)
-
-        return response
 
     except Exception as e:
         print(f"Search error: {e}")

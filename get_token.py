@@ -1,63 +1,3 @@
-# import requests # import pyotp
-# API_KEY     = "TotqUGJp"
-# CLIENT_CODE = "AABZ076636"
-# MPIN        = "7007"
-# TOTP_SECRET = "UZPWRDEXK2HWLF5EL4MQSQDM6I"
-
-# print("Script is Running...")
-
-# totp = pyotp.TOTP(TOTP_SECRET)
-# current_totp = totp.now()
-# print("TOTP:", current_totp)
-
-# url = "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword"
-
-# headers = {
-#     "Content-Type": "application/json",
-#     "Accept": "application/json",
-#     "X-UserType": "USER",
-#     "X-SourceID": "WEB",
-#     "X-ClientLocalIP": "127.0.0.1",
-#     "X-ClientPublicIP": "127.0.0.1",
-#     "X-MACAddress": "00:00:00:00:00:00",
-#     "X-PrivateKey": API_KEY
-# }
-
-# body = {
-#     "clientcode": CLIENT_CODE,
-#     "password": MPIN,
-#     "totp": current_totp
-# }
-
-# print("Login is on going...")
-# response = requests.post(url, json=body, headers=headers)
-# data = response.json()
-
-# print("Response:", data)
-
-# if data["status"]:
-#     jwt = data["data"]["jwtToken"]
-#     feed = data["data"]["feedToken"]
-    
-#     print("\n✅ LOGIN SUCCESSFUL!")
-#     print("JWT Token:", jwt)
-#     print("Feed Token:", feed)
-    
-#     # .env mein save karo
-#     with open(".env", "a") as f:
-#         f.write(f"\nANGEL_JWT_TOKEN={jwt}")
-#         f.write(f"\nANGEL_FEED_TOKEN={feed}")
-    
-#     print("\n.env file update successful!")
-    
-# else:
-#     print("\n❌ Login Failed:", data["message"])
-#     print("Error Code:", data["errorcode"])
-
-
-
-# get_token.py — Poora replace karo
-
 import requests
 import pyotp
 import os
@@ -75,7 +15,7 @@ def get_angel_tokens():
 
     # Validate karo
     if not all([API_KEY, CLIENT_CODE, MPIN, TOTP_SECRET]):
-        print(".env mein credentials missing hain!")
+        print(".env credentials missing !")
         print(f"API_KEY: {'✅' if API_KEY else 'Error'}")
         print(f"CLIENT_CODE: {'✅' if CLIENT_CODE else 'client code error'}")
         print(f"MPIN: {'✅' if MPIN else 'MPIN error'}")
@@ -112,7 +52,7 @@ def get_angel_tokens():
     }
 
     try:
-        print("AngelOne login ho raha hai...")
+        print("AngelOne is running...")
         response = requests.post(url, json=body, headers=headers)
         data = response.json()
 
@@ -141,8 +81,8 @@ def get_angel_tokens():
 
 def update_env_file(jwt_token, feed_token):
     """
-    .env file mein sirf JWT aur Feed token update karo
-    Baaki sab same rehega
+    .env file present only JWT aur Feed token update automatically
+    
     """
     env_path = ".env"
 
